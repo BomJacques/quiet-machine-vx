@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <meta name="theme-color" content="#101311">
+  <title>Quiet Machine VX</title>
+  <script type="module">
+    try {
+      const isJuceHost = location.protocol === "juce:" || location.hostname === "juce.backend";
+      if (!isJuceHost) throw new Error("Standalone browser mode");
+      const Juce = await import("./juce/index.js");
+      window.QMNative = {
+        setParameter: Juce.getNativeFunction("setParameter"),
+        beginParameterGesture: Juce.getNativeFunction("beginParameterGesture"),
+        endParameterGesture: Juce.getNativeFunction("endParameterGesture"),
+        getParameterState: Juce.getNativeFunction("getParameterState"),
+        noteOn: Juce.getNativeFunction("noteOn"),
+        noteOff: Juce.getNativeFunction("noteOff"),
+        panic: Juce.getNativeFunction("panic")
+      };
+      window.dispatchEvent(new Event("qm-native-ready"));
+    } catch (_) {
+      window.QMNative = null;
+    }
+  </script>
+  <style>
+    :root {
+      --bg: #090b0a;
+      --shell: #171a18;
+      --panel: #202421;
+      --panel-hi: #282d29;
+      --line: #414740;
+      --line-soft: #303530;
+      --text: #edf0eb;
+      --muted: #939b93;
+      --green: #a7d7a2;
+      --green-hot: #d2f7c9;
+      --amber: #e7b96a;
+      --red: #e36f68;
+      --cyan: #80c8c2;
+      --display: #07150f;
+      --display-text: #b6f3c4;
+      --shadow: rgba(0,0,0,.62);
+      --radius: 6px;
+      font-family: "Bahnschrift", "Arial Narrow", "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-width: 320px; min-height: 100%; margin: 0; background: var(--bg); color: var(--text); }
+    body { overflow: hidden; }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+    .app {
+      height: 100vh;
+      min-height: 690px;
+      display: grid;
+      grid-template-rows: 54px 1fr 34px;
+      background:
+        linear-gradient(115deg, rgba(255,255,255,.018), transparent 38%),
+        var(--shell);
+      border: 1px solid #30342f;
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 210px 184px minmax(300px, 1fr) auto;
+      align-items: stretch;
+      border-bottom: 1px solid #070807;
+      background: #121512;
+      box-shadow: 0 2px 14px rgba(0,0,0,.45);
+      z-index: 20;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 0 16px;
+      border-right: 1px solid #2d322e;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 24px;
+      height: 24px;
+      border: 1px solid #7f8b81;
+      display: grid;
+      place-items: center;
+      color: var(--green);
+      font: 800 10px/1 ui-monospace, monospace;
+      box-shadow: inset 0 0 0 3px #1c211d;
+    }
+
+    .brand-title { min-width: 0; }
+    .brand-title strong { display: block; font-size: 12px; letter-spacing: .12em; white-space: nowrap; }
+    .brand-title span { display: block; color: var(--muted); font: 9px/1.2 ui-monospace, monospace; letter-spacing: .14em; margin-top: 3px; }
+
+    .header-tabs { display: flex; align-items: stretch; border-right: 1px solid #2d322e; }
+    .header-tabs .mode-btn { height: 100%; min-width: 60px; padding: 0 12px; display: grid; place-items: center; border-radius: 0; border: 0; border-bottom: 2px solid transparent; font-size: 9px; letter-spacing: .08em; }
+    .header-tabs .mode-btn.active { box-shadow: none; border-bottom-color: var(--green); background: #1d211e; color: #f0f4ef; }
+
+    .preset-strip {
+      display: grid;
+      grid-template-columns: auto minmax(180px, 410px) auto;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      min-width: 0;
+    }
+
+    .icon-btn, .mini-btn, .mode-btn, .transport-btn, .panel-btn {
+      border: 1px solid #3a403b;
+      background: #1c201d;
+      min-width: 30px;
+      height: 30px;
+      display: inline-grid;
+      place-items: center;
+      cursor: pointer;
+      border-radius: 4px;
+      box-shadow: inset 0 1px rgba(255,255,255,.035), 0 1px 2px rgba(0,0,0,.5);
+      transition: background 90ms ease, border-color 90ms ease, color 90ms ease, transform 90ms ease;
+    }
+    .icon-btn:hover, .mini-btn:hover, .mode-btn:hover, .transport-btn:hover, .panel-btn:hover { background: #292e2a; border-color: #596159; }
+    .icon-btn:active, .mini-btn:active, .mode-btn:active, .transport-btn:active, .panel-btn:active { transform: translateY(1px); }
+
+    .preset-box {
+      height: 34px;
+      display: grid;
+      grid-template-columns: 34px 1fr 34px;
+      align-items: center;
+      border: 1px solid #464c46;
+      background: #090c0a;
+      border-radius: 4px;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .preset-box button { height: 100%; border: 0; background: #1a1e1b; color: var(--muted); cursor: pointer; }
+    .preset-box button:hover { color: var(--text); background: #242925; }
+    .preset-name { min-width: 0; padding: 0 12px; }
+    .preset-name small { display: block; color: #687168; font: 8px/1 ui-monospace, monospace; letter-spacing: .18em; margin-bottom: 4px; }
+    .preset-name strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--display-text); font: 11px/1 ui-monospace, monospace; letter-spacing: .06em; }
+
+    .host-strip { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-left: 1px solid #2d322e; }
+    .ab-group { display: flex; border: 1px solid #3b413c; border-radius: 4px; overflow: hidden; }
+    .ab-group button { width: 28px; height: 28px; border: 0; background: #181c19; color: #778078; font: 700 10px/1 ui-monospace, monospace; cursor: pointer; }
+    .ab-group button.active { background: #d8ddd8; color: #131613; }
+    .cpu { width: 72px; }
+    .cpu-head { display: flex; justify-content: space-between; color: #778078; font: 8px/1 ui-monospace, monospace; margin-bottom: 4px; }
+    .cpu-track { height: 3px; background: #070807; overflow: hidden; }
+    .cpu-track i { display: block; height: 100%; width: 24%; background: var(--green); }
+
+    .workspace { min-height: 0; display: grid; grid-template-columns: 1fr; position: relative; }
+    .sidebar {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      position: absolute;
+      z-index: 30;
+      inset: 0 auto 0 0;
+      width: 310px;
+      border-right: 1px solid #465048;
+      background: #111411;
+      min-height: 0;
+      transform: translateX(-102%);
+      transition: transform 140ms ease;
+      box-shadow: 12px 0 30px rgba(0,0,0,.48);
+    }
+    .sidebar.open { transform: translateX(0); }
+
+    .browser-head { padding: 12px 10px 10px; border-bottom: 1px solid #2b302c; }
+    .browser-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; color: #c7cdc7; font: 700 9px/1 ui-monospace, monospace; letter-spacing: .13em; }
+    .browser-search { width: 100%; height: 30px; padding: 0 9px; color: var(--text); background: #090c0a; border: 1px solid #3a423b; border-radius: 3px; font: 10px/1 ui-monospace, monospace; }
+    .browser-filters { display: flex; gap: 4px; margin-top: 7px; }
+    .browser-filters button { flex: 1; height: 24px; border: 1px solid #343a35; background: #191d1a; color: #6f786f; border-radius: 3px; font: 8px/1 ui-monospace, monospace; cursor: pointer; }
+    .browser-filters button.active { color: #101410; background: var(--green); border-color: var(--green-hot); }
+    .mode-btn {
+      width: 100%; height: 34px; display: grid; grid-template-columns: 20px 1fr; justify-items: start; align-items: center;
+      padding: 0 10px; color: #8f9890; border-color: transparent; background: transparent; font-size: 11px; font-weight: 700;
+    }
+    .mode-btn b { color: #687169; font: 700 9px/1 ui-monospace, monospace; }
+    .mode-btn.active { color: #ecf2ec; background: #242924; border-color: #414941; box-shadow: inset 3px 0 var(--green); }
+    .mode-btn.active b { color: var(--green); }
+
+    .browser { min-height: 0; overflow: auto; border-top: 1px solid #2a2e2a; padding: 12px 10px; }
+    .section-kicker { color: #6f786f; font: 8px/1 ui-monospace, monospace; letter-spacing: .17em; text-transform: uppercase; margin: 0 4px 9px; }
+    .sound-row {
+      width: 100%; border: 0; border-bottom: 1px solid #272b27; background: transparent; color: #929a93;
+      display: grid; grid-template-columns: 9px 1fr auto; align-items: center; gap: 8px; padding: 9px 5px; cursor: pointer; text-align: left; font-size: 10px;
+    }
+    .sound-row:hover { color: var(--text); background: #1a1e1b; }
+    .sound-row .dot { width: 5px; height: 5px; border-radius: 50%; background: #4c554e; }
+    .sound-row.active .dot { background: var(--green); box-shadow: 0 0 7px rgba(167,215,162,.6); }
+    .sound-row span:last-child { color: #5f685f; font: 8px/1 ui-monospace, monospace; }
+
+    .side-footer { padding: 10px; border-top: 1px solid #2b302b; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .panel-btn { font-size: 9px; font-weight: 700; letter-spacing: .05em; }
+
+    .main { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto 1fr 152px; background: #1a1e1b; transition: grid-template-rows 120ms ease; }
+    .main.keys-hidden { grid-template-rows: auto 1fr 36px; }
+    .main.keys-hidden .keys { display: none; }
+
+    .macrobar {
+      min-height: 104px;
+      display: grid;
+      grid-template-columns: minmax(440px, 1fr) 170px 130px;
+      gap: 8px;
+      padding: 10px;
+      border-bottom: 1px solid #090a09;
+      background: #191d1a;
+    }
+
+    .surface {
+      border: 1px solid #3a403b;
+      border-radius: var(--radius);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.022), transparent 14%),
+        #202421;
+      box-shadow: 0 2px 9px var(--shadow), inset 0 0 0 1px rgba(255,255,255,.014);
+      overflow: hidden;
+    }
+    .surface-head {
+      height: 26px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 10px;
+      border-bottom: 1px solid #343a35; background: #262b27; color: #a5ada6; font: 700 8px/1 ui-monospace, monospace; letter-spacing: .15em; text-transform: uppercase;
+    }
+    .surface-head .status { display: flex; align-items: center; gap: 6px; color: #697169; letter-spacing: .08em; }
+    .status-led { width: 5px; height: 5px; border-radius: 50%; background: #4f5750; }
+    .status-led.on { background: var(--green); box-shadow: 0 0 6px rgba(167,215,162,.75); }
+
+    .macros { display: grid; grid-template-columns: repeat(8, minmax(48px, 1fr)); gap: 3px; padding: 7px 8px 5px; align-items: center; }
+    .knob-wrap { min-width: 0; display: grid; justify-items: center; gap: 5px; }
+    .knob {
+      position: relative; width: 42px; height: 42px; border-radius: 50%;
+      background: conic-gradient(from 225deg, var(--knob-color, var(--green)) calc(var(--value, .5) * 270deg), #373d38 0 270deg, transparent 0);
+      filter: drop-shadow(0 2px 2px rgba(0,0,0,.8));
+    }
+    .knob::before {
+      content: ""; position: absolute; inset: 5px; border-radius: 50%;
+      background: radial-gradient(circle at 38% 28%, #4b514c, #242824 56%, #171a18 58%);
+      border: 1px solid #090b09; box-shadow: inset 0 1px 1px rgba(255,255,255,.12);
+    }
+    .knob::after {
+      content: ""; position: absolute; width: 2px; height: 13px; left: calc(50% - 1px); top: 8px; border-radius: 2px;
+      background: #e9eee9; transform-origin: 1px 15px; transform: rotate(calc(-135deg + var(--value, .5) * 270deg));
+      box-shadow: 0 0 2px #000;
+    }
+    .knob input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ns-resize; z-index: 3; }
+    .knob-label { max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; color: #aeb5af; font: 700 8px/1 ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase; }
+    .knob-value { color: #68716a; font: 8px/1 ui-monospace, monospace; }
+    .knob-index { position: absolute; left: -3px; top: -3px; width: 14px; height: 14px; display: grid; place-items: center; border-radius: 50%; background: #d6ddd5; color: #151815; font: 700 7px/1 ui-monospace, monospace; z-index: 4; pointer-events: none; }
+
+    .morph-body { display: grid; grid-template-columns: 1fr 42px; gap: 7px; padding: 8px; height: 91px; }
+    .morph-pad { position: relative; border: 1px solid #3a443d; background: linear-gradient(90deg, transparent 49.5%, #26342b 50%, transparent 50.5%), linear-gradient(transparent 49.5%, #26342b 50%, transparent 50.5%), #09110c; cursor: crosshair; overflow: hidden; }
+    .morph-pad::before { content: "A"; position: absolute; left: 5px; top: 4px; color: #4d6353; font: 8px ui-monospace, monospace; }
+    .morph-pad::after { content: "D"; position: absolute; right: 5px; bottom: 4px; color: #4d6353; font: 8px ui-monospace, monospace; }
+    .morph-puck { position: absolute; width: 15px; height: 15px; border: 1px solid #e8f7e8; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px rgba(167,215,162,.6); transform: translate(-50%,-50%); pointer-events: none; }
+    .morph-readout { display: grid; grid-template-rows: 1fr 1fr; gap: 5px; }
+    .morph-readout div { display: grid; place-content: center; background: #0a0d0b; border: 1px solid #343a35; color: var(--display-text); font: 9px/1.2 ui-monospace, monospace; text-align: center; }
+
+    .master-body { display: grid; grid-template-columns: 1fr 20px; align-items: center; padding: 8px 10px; height: 91px; }
+    .master-body .knob { width: 52px; height: 52px; }
+    .meter { height: 70px; display: flex; gap: 3px; align-items: end; padding: 2px; background: #080a08; border: 1px solid #333833; }
+    .meter i { width: 5px; height: var(--meter, 8%); background: linear-gradient(to top, var(--green) 0 74%, var(--amber) 75% 90%, var(--red) 91%); transition: height 45ms linear; }
+
+    .content { min-height: 0; position: relative; overflow: auto; padding: 10px; background-color: #141714; background-image: linear-gradient(#1d211e 1px, transparent 1px), linear-gradient(90deg, #1d211e 1px, transparent 1px); background-size: 24px 24px; }
+    .view { display: none; min-height: 100%; }
+    .view.active { display: block; }
+
+    .play-grid { display: grid; grid-template-columns: minmax(330px, 1.2fr) minmax(320px, .95fr); gap: 10px; min-height: 100%; }
+    .hero-engine { min-height: 300px; display: grid; grid-template-rows: 26px 116px 1fr; }
+    .scope { position: relative; background: #07100b; border-bottom: 1px solid #303730; overflow: hidden; }
+    #scopeCanvas { width: 100%; height: 100%; display: block; }
+    .scope-readout { position: absolute; top: 8px; left: 10px; display: flex; gap: 12px; color: #56715d; font: 8px/1 ui-monospace, monospace; letter-spacing: .07em; pointer-events: none; }
+    .performance-controls { display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; gap: 12px; padding: 16px 14px 12px; }
+    .performance-controls .knob { width: 64px; height: 64px; }
+    .performance-controls .knob::after { height: 18px; top: 9px; transform-origin: 1px 22px; }
+    .performance-controls .knob-label { font-size: 9px; }
+
+    .right-stack { display: grid; grid-template-rows: 1fr 136px; gap: 10px; min-height: 0; }
+    .movement { display: grid; grid-template-rows: 26px 1fr; }
+    .movement-body { display: grid; grid-template-columns: 1fr 118px; min-height: 0; }
+    .steps-preview { padding: 11px; display: grid; grid-template-columns: repeat(8,1fr); gap: 5px; align-items: end; border-right: 1px solid #353a35; }
+    .step-bar { min-width: 8px; height: var(--h); background: #353b36; border-top: 2px solid #616b62; transition: background 80ms, border-color 80ms; }
+    .step-bar.active { background: #6c8f70; border-color: var(--green-hot); box-shadow: 0 0 10px rgba(167,215,162,.22); }
+    .movement-tools { padding: 10px; display: grid; gap: 6px; align-content: center; }
+    .segment { display: flex; border: 1px solid #3b423c; border-radius: 4px; overflow: hidden; }
+    .segment button { flex: 1; height: 28px; border: 0; background: #171b18; color: #7c857d; font: 700 8px/1 ui-monospace, monospace; cursor: pointer; }
+    .segment button.active { background: #d9ded9; color: #141714; }
+    .movement-tools label { color: #737c74; font: 8px/1 ui-monospace, monospace; letter-spacing: .1em; }
+
+    .character { display: grid; grid-template-rows: 26px 1fr; }
+    .character-body { display: grid; grid-template-columns: repeat(3,1fr); align-items: center; padding: 10px 14px; }
+    .character-cell { min-width: 0; display: grid; justify-items: center; gap: 6px; border-right: 1px solid #343a35; }
+    .character-cell:last-child { border-right: 0; }
+
+    .edit-grid { display: grid; grid-template-columns: repeat(12, minmax(62px, 1fr)); grid-auto-rows: minmax(170px, auto); gap: 8px; }
+    .module { min-width: 0; }
+    .module.span-3 { grid-column: span 3; }
+    .module.span-4 { grid-column: span 4; }
+    .module.span-5 { grid-column: span 5; }
+    .module.span-7 { grid-column: span 7; }
+    .module-body { height: calc(100% - 26px); padding: 12px; }
+    .module-power { height: 18px; min-width: 28px; padding: 0 6px; border: 1px solid #465048; background: #172019; color: var(--green); border-radius: 3px; font: 700 7px/1 ui-monospace, monospace; cursor: pointer; }
+    .module-power.off { color: #707870; background: #171917; }
+    .control-row { display: flex; align-items: center; justify-content: space-around; gap: 8px; height: 100%; }
+    .mini-display { background: var(--display); border: 1px solid #34463a; color: var(--display-text); font: 10px/1.35 ui-monospace, monospace; padding: 8px; min-height: 48px; box-shadow: inset 0 0 12px #000; }
+    .routing { display: grid; grid-template-columns: repeat(5,1fr); gap: 9px; align-items: center; height: 100%; }
+    .route-node { display: grid; place-items: center; height: 54px; border: 1px solid #475049; background: #191d1a; color: #aeb6af; font: 700 8px/1.3 ui-monospace, monospace; text-align: center; position: relative; }
+    .route-node:not(:last-child)::after { content: ">"; position: absolute; right: -10px; color: var(--green); z-index: 2; }
+    .jack { width: 11px; height: 11px; border-radius: 50%; background: #070907; border: 2px solid #687168; box-shadow: inset 0 0 0 2px #111; margin-top: 4px; }
+
+    .seq-grid { display: grid; grid-template-columns: 60px repeat(16, minmax(30px, 1fr)); gap: 2px; min-width: 820px; }
+    .seq-label, .seq-cell, .seq-head { height: 32px; display: grid; place-items: center; }
+    .seq-head { color: #667067; font: 8px/1 ui-monospace, monospace; }
+    .seq-label { justify-items: start; padding-left: 8px; color: #9ca49d; background: #202421; font: 9px/1 ui-monospace, monospace; }
+    .seq-cell { border: 1px solid #303630; background: #181c19; cursor: pointer; }
+    .seq-cell:hover { border-color: #5b655d; }
+    .seq-cell.on { background: #6c926f; border-color: #b1dcb1; box-shadow: inset 0 0 8px rgba(0,0,0,.35); }
+    .seq-cell.playhead { box-shadow: inset 0 -3px var(--amber); }
+
+    .keyboard-zone { display: grid; grid-template-rows: 28px 1fr; border-top: 1px solid #090b09; background: #101310; padding: 6px 10px 8px; }
+    .transport { display: flex; align-items: center; gap: 5px; }
+    .transport-btn { height: 24px; min-width: 28px; font: 700 9px/1 ui-monospace, monospace; }
+    .transport-btn.playing { color: #101410; background: var(--green); border-color: var(--green-hot); }
+    .transport-readout { margin-left: 7px; color: #7c867d; font: 9px/1 ui-monospace, monospace; }
+    .transport-readout strong { color: var(--display-text); }
+    .keys { position: relative; height: 110px; display: flex; max-width: 980px; margin: 0 auto; width: 100%; border: 1px solid #070807; user-select: none; }
+    .white-key { flex: 1; position: relative; border: 0; border-right: 1px solid #717671; border-bottom: 4px solid #aeb2ae; background: linear-gradient(#f0f1ed, #c8cbc7); cursor: pointer; border-radius: 0 0 3px 3px; }
+    .white-key.active { background: linear-gradient(#c7ebc4,#90bb8e); }
+    .white-key span { position: absolute; bottom: 7px; left: 0; right: 0; color: #5d635e; font: 8px/1 ui-monospace, monospace; }
+    .black-key { position: absolute; top: 0; width: 6%; height: 62%; z-index: 2; border: 1px solid #050605; border-bottom: 4px solid #050605; background: linear-gradient(90deg,#181b18,#363a36 50%,#111311); cursor: pointer; border-radius: 0 0 3px 3px; transform: translateX(-50%); }
+    .black-key.active { background: linear-gradient(90deg,#47634b,#87ad83 50%,#38523c); }
+
+    .bottombar { display: grid; grid-template-columns: 190px 1fr auto; align-items: center; border-top: 1px solid #303530; background: #101310; color: #687169; font: 8px/1 ui-monospace, monospace; letter-spacing: .08em; }
+    .bottombar > div { padding: 0 11px; }
+    .bottombar .hint { text-align: center; }
+    .bottombar .build { text-align: right; color: #566058; }
+
+    .toast { position: fixed; left: 50%; bottom: 48px; transform: translate(-50%,12px); background: #e5e9e4; color: #161916; padding: 9px 14px; border-radius: 4px; font: 700 9px/1 ui-monospace, monospace; opacity: 0; pointer-events: none; transition: opacity 150ms, transform 150ms; z-index: 100; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+    .toast.show { opacity: 1; transform: translate(-50%,0); }
+    .bypass .main { filter: saturate(.25) brightness(.7); }
+
+    @media (max-width: 980px) {
+      body { overflow: auto; }
+      .app { min-width: 760px; }
+      .topbar { grid-template-columns: 190px 170px 1fr auto; }
+      .macrobar { grid-template-columns: 1fr 170px; }
+      .master-surface { display: none; }
+      .play-grid { grid-template-columns: 1fr; }
+      .right-stack { grid-template-columns: 1fr 1fr; grid-template-rows: minmax(170px,1fr); }
+      .edit-grid { grid-template-columns: repeat(6, 1fr); }
+      .module.span-3, .module.span-4 { grid-column: span 3; }
+      .module.span-5, .module.span-7 { grid-column: span 6; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">QM</div>
+        <div class="brand-title"><strong>QUIET MACHINE</strong><span>VX / GENERATIVE INSTRUMENT</span></div>
+      </div>
+      <nav class="header-tabs" aria-label="Instrument views">
+        <button class="mode-btn active" data-view="play">PLAY</button>
+        <button class="mode-btn" data-view="edit">EDIT</button>
+        <button class="mode-btn" data-view="sequence">SEQ</button>
+      </nav>
+      <div class="preset-strip">
+        <button class="icon-btn" id="browserToggle" title="Open preset browser" aria-label="Open preset browser">BROWSE</button>
+        <div class="preset-box">
+          <button id="presetPrev" aria-label="Previous preset">&lt;</button>
+          <div class="preset-name"><small>FACTORY / ATMOSPHERE</small><strong><span id="presetName">GLASS HORIZON</span><span id="dirtyIndicator" hidden> *</span></strong></div>
+          <button id="presetNext" aria-label="Next preset">&gt;</button>
+        </div>
+        <button class="icon-btn" id="savePreset" title="Save snapshot">SAVE</button>
+      </div>
+      <div class="host-strip">
+        <div class="ab-group"><button class="active" data-ab="A">A</button><button data-ab="B">B</button></div>
+        <button class="icon-btn" id="bypass" title="Bypass instrument">BYP</button>
+        <div class="cpu"><div class="cpu-head"><span>CPU</span><span id="cpuValue">04%</span></div><div class="cpu-track"><i id="cpuBar"></i></div></div>
+        <button class="icon-btn" id="settings" title="Settings">SET</button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" id="sidebar">
+        <div class="browser-head"><div class="browser-title"><span>PRESET BROWSER</span><span id="resultCount">8 RESULTS</span></div><input class="browser-search" id="presetSearch" placeholder="Search presets" aria-label="Search presets"><div class="browser-filters"><button class="active">ALL</button><button>FACTORY</button><button>USER</button><button>FAV</button></div></div>
+        <div class="browser">
+          <div class="section-kicker">Atmosphere / Evolving</div>
+          <button class="sound-row active" data-preset="0"><i class="dot"></i><span>Glass Horizon</span><span>01</span></button>
+          <button class="sound-row" data-preset="1"><i class="dot"></i><span>Slow Signal</span><span>02</span></button>
+          <button class="sound-row" data-preset="2"><i class="dot"></i><span>Tape Constellation</span><span>03</span></button>
+          <button class="sound-row" data-preset="3"><i class="dot"></i><span>Green Room</span><span>04</span></button>
+          <div class="section-kicker" style="margin-top:18px">User Snapshots</div>
+          <button class="sound-row"><i class="dot"></i><span>Empty Slot</span><span>U1</span></button>
+          <button class="sound-row"><i class="dot"></i><span>Empty Slot</span><span>U2</span></button>
+        </div>
+        <div class="side-footer"><button class="panel-btn" id="initPreset">INIT</button><button class="panel-btn" id="randomize">RANDOMIZE</button></div>
+      </aside>
+
+      <main class="main">
+        <section class="macrobar">
+          <div class="surface">
+            <div class="surface-head"><span>PERFORMANCE MACROS</span><span class="status"><i class="status-led on"></i>HOST AUTOMATION</span></div>
+            <div class="macros" id="macros"></div>
+          </div>
+          <div class="surface">
+            <div class="surface-head"><span>MORPHER</span><span class="status">A - D</span></div>
+            <div class="morph-body">
+              <div class="morph-pad" id="morphPad"><i class="morph-puck" id="morphPuck"></i></div>
+              <div class="morph-readout"><div>X<br><strong id="morphX">50</strong></div><div>Y<br><strong id="morphY">50</strong></div></div>
+            </div>
+          </div>
+          <div class="surface master-surface">
+            <div class="surface-head"><span>OUTPUT</span><span class="status">-6.0 dB</span></div>
+            <div class="master-body"><div id="masterKnob"></div><div class="meter"><i id="meterL"></i><i id="meterR"></i></div></div>
+          </div>
+        </section>
+
+        <section class="content">
+          <div class="view active" id="view-play">
+            <div class="play-grid">
+              <div class="surface hero-engine">
+                <div class="surface-head"><span>HARMONIC ENGINE</span><span class="status"><i class="status-led on"></i>POLY 12</span></div>
+                <div class="scope"><canvas id="scopeCanvas"></canvas><div class="scope-readout"><span>VOICE: TAPE CHOIR</span><span id="noteReadout">C3 / G3 / D4</span><span>48 kHz</span></div></div>
+                <div class="performance-controls" id="performanceControls"></div>
+              </div>
+              <div class="right-stack">
+                <div class="surface movement">
+                  <div class="surface-head"><span>GENERATIVE MOTION</span><span class="status"><i class="status-led on" id="motionLed"></i>SYNC</span></div>
+                  <div class="movement-body">
+                    <div class="steps-preview" id="stepPreview"></div>
+                    <div class="movement-tools">
+                      <label>DIRECTION</label><div class="segment" id="direction"><button class="active" data-dir="forward">FWD</button><button data-dir="reverse">REV</button></div>
+                      <label>RATE</label><div class="segment" id="rate"><button data-rate="0.5">1/2</button><button class="active" data-rate="1">1/4</button><button data-rate="2">1/8</button></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="surface character">
+                  <div class="surface-head"><span>CHARACTER</span><span class="status">SIGNAL COLOR</span></div>
+                  <div class="character-body" id="characterControls"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="view" id="view-edit">
+            <div class="edit-grid">
+              <div class="surface module span-3"><div class="surface-head"><span>01 TAPE CHOIR</span><button class="module-power" data-param="choir">ON</button></div><div class="module-body"><div class="control-row" id="choirControls"></div></div></div>
+              <div class="surface module span-3"><div class="surface-head"><span>02 GRAIN GLASS</span><button class="module-power" data-param="grain">ON</button></div><div class="module-body"><div class="control-row" id="grainControls"></div></div></div>
+              <div class="surface module span-3"><div class="surface-head"><span>03 SUB CURRENT</span><button class="module-power" data-param="sub">ON</button></div><div class="module-body"><div class="control-row" id="subControls"></div></div></div>
+              <div class="surface module span-3"><div class="surface-head"><span>04 AIR FIELD</span><button class="module-power" data-param="airLevel">ON</button></div><div class="module-body"><div class="control-row" id="airControls"></div></div></div>
+              <div class="surface module span-5"><div class="surface-head"><span>FILTER / DYNAMICS</span><span class="status">SERIAL</span></div><div class="module-body"><div class="control-row" id="filterControls"></div></div></div>
+              <div class="surface module span-7"><div class="surface-head"><span>SIGNAL ROUTING</span><span class="status">STEREO</span></div><div class="module-body"><div class="routing"><div class="route-node">SOURCES<div class="jack"></div></div><div class="route-node">TAPE BUS<div class="jack"></div></div><div class="route-node">SV FILTER<div class="jack"></div></div><div class="route-node">CLOUD FX<div class="jack"></div></div><div class="route-node">MASTER<div class="jack"></div></div></div></div></div>
+            </div>
+          </div>
+
+          <div class="view" id="view-sequence">
+            <div class="surface" style="min-height:100%">
+              <div class="surface-head"><span>16 STEP HARMONIC SEQUENCER</span><span class="status">CLICK CELLS TO PROGRAM</span></div>
+              <div style="padding:14px;overflow:auto"><div class="seq-grid" id="seqGrid"></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="keyboard-zone">
+          <div class="transport">
+            <button class="transport-btn" id="playBtn" title="Start or stop">PLAY</button>
+            <button class="transport-btn" id="stopBtn" title="Stop and reset">STOP</button>
+            <button class="transport-btn" id="recordBtn" title="Capture master output">REC</button>
+            <button class="transport-btn" id="keysToggle" title="Show or hide keyboard">KEYS</button>
+            <button class="transport-btn" id="panicBtn" title="Release all voices">PANIC</button>
+            <span class="transport-readout">TEMPO <strong id="bpmReadout">72.0</strong> BPM</span>
+            <span class="transport-readout">STEP <strong id="stepReadout">01</strong> / 16</span>
+            <span class="transport-readout" id="audioStatus">AUDIO READY</span>
+          </div>
+          <div class="keys" id="keyboard"></div>
+        </section>
+      </main>
+    </div>
+
+    <footer class="bottombar"><div>MIDI IN: OMNI</div><div class="hint" id="focusedReadout">FOCUSED PARAMETER: NONE</div><div class="build">100% / 1180 x 760</div></footer>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const $ = (q, root = document) => root.querySelector(q);
+      const $$ = (q, root = document) => [...root.querySelectorAll(q)];
+      const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const nativeHost = location.protocol === "juce:" || location.hostname === "juce.backend";
+
+      const state = {
+        preset: 0,
+        playing: false,
+        recording: false,
+        direction: 1,
+        rate: 1,
+        step: 0,
+        bpm: 72,
+        morphX: .5,
+        morphY: .5,
+        ab: "A",
+        abStates: { A: null, B: null },
+        values: {
+          space: .66, motion: .42, warmth: .58, air: .37, bloom: .72, age: .33, gravity: .49, focus: .61,
+          master: .72, density: .55, spread: .64, drift: .29, shimmer: .42, noise: .19, drive: .24,
+          choir: .72, choirTune: .5, grain: .51, grainSize: .43, sub: .38, subTone: .42, airLevel: .24, airColor: .68,
+          cutoff: .67, resonance: .22, attack: .36, release: .62
+        },
+        sequence: [0,4,7,11,7,4,2,9,0,7,5,2,9,4,7,11],
+        activeCells: new Set(["0:0","0:4","0:8","0:12","1:2","1:6","1:10","1:14","2:3","2:7","2:11","2:15"])
+      };
+
+      const presets = [
+        { name: "GLASS HORIZON", vals: { space:.66,motion:.42,warmth:.58,air:.37,bloom:.72,age:.33,gravity:.49,focus:.61,cutoff:.67,resonance:.22,attack:.36,release:.62 } },
+        { name: "SLOW SIGNAL", vals: { space:.82,motion:.18,warmth:.72,air:.22,bloom:.83,age:.61,gravity:.68,focus:.38,cutoff:.48,resonance:.14,attack:.64,release:.82 } },
+        { name: "TAPE CONSTELLATION", vals: { space:.58,motion:.69,warmth:.64,air:.49,bloom:.55,age:.78,gravity:.31,focus:.52,cutoff:.72,resonance:.31,attack:.25,release:.57 } },
+        { name: "GREEN ROOM", vals: { space:.43,motion:.51,warmth:.81,air:.29,bloom:.48,age:.45,gravity:.57,focus:.75,cutoff:.59,resonance:.19,attack:.31,release:.48 } }
+      ];
+
+      const macroDefs = [
+        ["SPACE","space"],["MOTION","motion"],["WARMTH","warmth"],["AIR","air"],
+        ["BLOOM","bloom"],["AGE","age"],["GRAVITY","gravity"],["FOCUS","focus"]
+      ];
+
+      const stepHeights = [38,76,51,88,43,64,92,57,72,40,84,55,95,48,69,81];
+      const noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+      class AudioEngine {
+        constructor() {
+          this.ctx = null;
+          this.analyser = null;
+          this.master = null;
+          this.filter = null;
+          this.wet = null;
+          this.dry = null;
+          this.delay = null;
+          this.timer = null;
+          this.voices = new Map();
+          this.mediaDest = null;
+          this.recorder = null;
+          this.chunks = [];
+        }
+        async ensure() {
+          if (this.ctx) { if (this.ctx.state === "suspended") await this.ctx.resume(); return; }
+          const AC = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AC();
+          this.master = this.ctx.createGain();
+          this.filter = this.ctx.createBiquadFilter();
+          this.filter.type = "lowpass";
+          this.filter.Q.value = 2.2;
+          this.dry = this.ctx.createGain();
+          this.wet = this.ctx.createGain();
+          this.delay = this.ctx.createDelay(2);
+          const feedback = this.ctx.createGain();
+          feedback.gain.value = .33;
+          const comp = this.ctx.createDynamicsCompressor();
+          comp.threshold.value = -12;
+          comp.knee.value = 16;
+          comp.ratio.value = 5;
+          comp.attack.value = .008;
+          comp.release.value = .24;
+          this.analyser = this.ctx.createAnalyser();
+          this.analyser.fftSize = 1024;
+          this.filter.connect(this.dry);
+          this.filter.connect(this.delay);
+          this.delay.connect(feedback).connect(this.delay);
+          this.delay.connect(this.wet);
+          this.dry.connect(this.master);
+          this.wet.connect(this.master);
+          this.master.connect(comp).connect(this.analyser).connect(this.ctx.destination);
+          this.mediaDest = this.ctx.createMediaStreamDestination();
+          comp.connect(this.mediaDest);
+          this.update();
+          $("#audioStatus").textContent = "AUDIO ACTIVE";
+        }
+        update() {
+          if (!this.ctx) return;
+          const v = state.values;
+          const now = this.ctx.currentTime;
+          const cutoff = 260 * Math.pow(32, v.cutoff * .75 + v.focus * .25);
+          this.filter.frequency.setTargetAtTime(cutoff, now, .025);
+          this.filter.Q.setTargetAtTime(1 + v.resonance * 12, now, .025);
+          this.dry.gain.setTargetAtTime(1 - v.space * .34, now, .025);
+          this.wet.gain.setTargetAtTime(v.space * .58, now, .025);
+          this.delay.delayTime.setTargetAtTime(.12 + v.bloom * .58, now, .03);
+          this.master.gain.setTargetAtTime(v.master * .72, now, .025);
+        }
+        freq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+        async noteOn(midi, velocity = .72, duration = null) {
+          await this.ensure();
+          if (this.voices.has(midi)) this.noteOff(midi);
+          const now = this.ctx.currentTime;
+          const v = state.values;
+          const bus = this.ctx.createGain();
+          const pan = this.ctx.createStereoPanner();
+          pan.pan.value = (Math.random() * 2 - 1) * v.spread;
+          bus.gain.setValueAtTime(.0001, now);
+          bus.gain.exponentialRampToValueAtTime(Math.max(.001, velocity * .11), now + .03 + v.attack * 1.2);
+          const osc1 = this.ctx.createOscillator();
+          const osc2 = this.ctx.createOscillator();
+          const lfo = this.ctx.createOscillator();
+          const lfoGain = this.ctx.createGain();
+          osc1.type = "triangle";
+          osc2.type = v.age > .55 ? "sawtooth" : "sine";
+          const f = this.freq(midi);
+          osc1.frequency.value = f;
+          osc2.frequency.value = f * 2.003;
+          osc2.detune.value = (v.drift - .5) * 15;
+          lfo.frequency.value = .08 + v.motion * 2.1;
+          lfoGain.gain.value = 1 + v.drift * 8;
+          lfo.connect(lfoGain).connect(osc1.detune);
+          const g1 = this.ctx.createGain();
+          const g2 = this.ctx.createGain();
+          g1.gain.value = .82;
+          g2.gain.value = .12 + v.air * .16;
+          osc1.connect(g1).connect(bus);
+          osc2.connect(g2).connect(bus);
+          bus.connect(pan).connect(this.filter);
+          osc1.start(); osc2.start(); lfo.start();
+          this.voices.set(midi, { bus, osc1, osc2, lfo });
+          if (duration) setTimeout(() => this.noteOff(midi), duration * 1000);
+        }
+        noteOff(midi) {
+          const voice = this.voices.get(midi);
+          if (!voice || !this.ctx) return;
+          const now = this.ctx.currentTime;
+          const rel = .18 + state.values.release * 2.6;
+          voice.bus.gain.cancelScheduledValues(now);
+          voice.bus.gain.setTargetAtTime(.0001, now, rel / 5);
+          setTimeout(() => {
+            try { voice.osc1.stop(); voice.osc2.stop(); voice.lfo.stop(); voice.bus.disconnect(); } catch (_) {}
+          }, rel * 1100);
+          this.voices.delete(midi);
+        }
+        allOff() { [...this.voices.keys()].forEach(n => this.noteOff(n)); }
+        async startClock() {
+          await this.ensure();
+          this.stopClock();
+          const tick = () => {
+            const idx = state.direction > 0 ? state.step : 15 - state.step;
+            const root = 48 + state.sequence[idx];
+            const chord = [root, root + 7, root + 12 + (idx % 3 === 0 ? 4 : 2)];
+            chord.forEach((n, i) => this.noteOn(n, .66 - i * .09, 60 / state.bpm * 1.8));
+            state.step = (state.step + 1) % 16;
+            updatePlayhead();
+          };
+          tick();
+          this.timer = setInterval(tick, (60000 / state.bpm) / state.rate);
+        }
+        stopClock() { if (this.timer) clearInterval(this.timer); this.timer = null; }
+        async record() {
+          await this.ensure();
+          if (state.recording) {
+            this.recorder.stop();
+            state.recording = false;
+            return;
+          }
+          this.chunks = [];
+          this.recorder = new MediaRecorder(this.mediaDest.stream);
+          this.recorder.ondataavailable = e => { if (e.data.size) this.chunks.push(e.data); };
+          this.recorder.onstop = () => {
+            const blob = new Blob(this.chunks, {type:"audio/webm"});
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "quiet-machine-vx-take.webm";
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+            toast("MASTER TAKE EXPORTED");
+          };
+          this.recorder.start();
+          state.recording = true;
+        }
+      }
+
+      const engine = new AudioEngine();
+
+      function toast(message) {
+        const el = $("#toast");
+        el.textContent = message;
+        el.classList.add("show");
+        clearTimeout(toast.timer);
+        toast.timer = setTimeout(() => el.classList.remove("show"), 1500);
+      }
+
+      function knob(label, key, options = {}) {
+        const wrap = document.createElement("div");
+        wrap.className = "knob-wrap";
+        const value = state.values[key];
+        const color = options.color || "var(--green)";
+        wrap.innerHTML = `<div class="knob" style="--value:${value};--knob-color:${color}">${options.index ? `<i class="knob-index">${options.index}</i>` : ""}<input aria-label="${label}" type="range" min="0" max="1" step="0.001" value="${value}"></div><div class="knob-label">${label}</div><div class="knob-value">${Math.round(value*100)}</div>`;
+        const input = $("input", wrap);
+        input.addEventListener("pointerdown", () => { $("#focusedReadout").textContent = `FOCUSED PARAMETER: ${label} / ${Math.round(state.values[key]*100)}`; window.QMNative?.beginParameterGesture(key); });
+        input.addEventListener("pointerup", () => window.QMNative?.endParameterGesture(key));
+        input.addEventListener("pointercancel", () => window.QMNative?.endParameterGesture(key));
+        input.addEventListener("input", () => {
+          const val = Number(input.value);
+          state.values[key] = val;
+          $(".knob", wrap).style.setProperty("--value", val);
+          $(".knob-value", wrap).textContent = Math.round(val * 100);
+          $("#focusedReadout").textContent = `FOCUSED PARAMETER: ${label} / ${Math.round(val*100)}`;
+          $("#dirtyIndicator").hidden = false;
+          engine.update();
+          window.QMNative?.setParameter(key, val);
+          persist();
+        });
+        return wrap;
+      }
+
+      function mountKnobs(target, defs) {
+        const root = $(target);
+        root.replaceChildren(...defs.map(d => knob(d[0], d[1], d[2] || {})));
+      }
+
+      function buildControls() {
+        mountKnobs("#macros", macroDefs.map((d, i) => [d[0], d[1], { index: i + 1 }]));
+        mountKnobs("#performanceControls", [["DENSITY","density"],["SPREAD","spread"],["DRIFT","drift"],["SHIMMER","shimmer"]]);
+        mountKnobs("#characterControls", [["NOISE","noise",{color:"var(--amber)"}],["DRIVE","drive",{color:"var(--amber)"}],["FOCUS","focus",{color:"var(--cyan)"}]]);
+        mountKnobs("#choirControls", [["LEVEL","choir"],["TUNE","choirTune"]]);
+        mountKnobs("#grainControls", [["LEVEL","grain"],["SIZE","grainSize"]]);
+        mountKnobs("#subControls", [["LEVEL","sub"],["TONE","subTone"]]);
+        mountKnobs("#airControls", [["LEVEL","airLevel"],["COLOR","airColor"]]);
+        mountKnobs("#filterControls", [["CUTOFF","cutoff"],["RESO","resonance"],["ATTACK","attack"],["RELEASE","release"]]);
+        $("#masterKnob").replaceChildren(knob("LEVEL", "master"));
+      }
+
+      function buildSteps() {
+        const root = $("#stepPreview");
+        root.replaceChildren(...stepHeights.map((h, i) => {
+          const el = document.createElement("i");
+          el.className = "step-bar";
+          el.style.setProperty("--h", `${h}%`);
+          el.dataset.step = i;
+          return el;
+        }));
+      }
+
+      function buildSequencer() {
+        const root = $("#seqGrid");
+        const frag = document.createDocumentFragment();
+        const corner = document.createElement("div"); corner.className = "seq-head"; frag.append(corner);
+        for (let s=0;s<16;s++) { const h=document.createElement("div"); h.className="seq-head"; h.textContent=String(s+1).padStart(2,"0"); frag.append(h); }
+        ["HIGH","MID","LOW","AIR"].forEach((label,row) => {
+          const l=document.createElement("div"); l.className="seq-label"; l.textContent=label; frag.append(l);
+          for (let col=0;col<16;col++) {
+            const c=document.createElement("button"); c.className="seq-cell"; c.dataset.row=row; c.dataset.col=col;
+            if (state.activeCells.has(`${row}:${col}`)) c.classList.add("on");
+            c.addEventListener("click", () => { const k=`${row}:${col}`; state.activeCells.has(k)?state.activeCells.delete(k):state.activeCells.add(k); c.classList.toggle("on"); persist(); });
+            frag.append(c);
+          }
+        });
+        root.replaceChildren(frag);
+      }
+
+      function buildKeyboard() {
+        const root = $("#keyboard");
+        const whites = [48,50,52,53,55,57,59,60,62,64,65,67,69,71,72];
+        const blacks = [{n:49,p:6.67},{n:51,p:13.33},{n:54,p:26.67},{n:56,p:33.33},{n:58,p:40},{n:61,p:53.33},{n:63,p:60},{n:66,p:73.33},{n:68,p:80},{n:70,p:86.67}];
+        whites.forEach(n => {
+          const b=document.createElement("button"); b.className="white-key"; b.dataset.note=n; b.innerHTML=`<span>${noteNames[n%12]}${Math.floor(n/12)-1}</span>`; bindKey(b,n); root.append(b);
+        });
+        blacks.forEach(o => { const b=document.createElement("button"); b.className="black-key"; b.dataset.note=o.n; b.style.left=`${o.p}%`; bindKey(b,o.n); root.append(b); });
+      }
+
+      function bindKey(el, note) {
+        const on = e => { e.preventDefault(); el.classList.add("active"); window.QMNative ? window.QMNative.noteOn(note, .8) : engine.noteOn(note, .8); $("#noteReadout").textContent=`${noteNames[note%12]}${Math.floor(note/12)-1}`; };
+        const off = () => { el.classList.remove("active"); window.QMNative ? window.QMNative.noteOff(note) : engine.noteOff(note); };
+        el.addEventListener("pointerdown", on); el.addEventListener("pointerup", off); el.addEventListener("pointerleave", off); el.addEventListener("pointercancel", off);
+      }
+
+      function updatePlayhead() {
+        $$(".step-bar").forEach((el,i) => el.classList.toggle("active", i === state.step));
+        $$(".seq-cell").forEach(el => el.classList.toggle("playhead", Number(el.dataset.col) === state.step));
+        $("#stepReadout").textContent = String(state.step + 1).padStart(2,"0");
+      }
+
+      function selectPreset(index) {
+        state.preset = (index + presets.length) % presets.length;
+        const p = presets[state.preset];
+        Object.assign(state.values, p.vals);
+        Object.entries(p.vals).forEach(([key,value]) => window.QMNative?.setParameter(key,value));
+        $("#presetName").textContent = p.name;
+        $("#dirtyIndicator").hidden = true;
+        buildControls();
+        engine.update();
+        persist();
+        toast(`LOADED ${p.name}`);
+      }
+
+      function randomize() {
+        macroDefs.forEach(([,key]) => state.values[key] = .16 + Math.random() * .7);
+        ["density","spread","drift","shimmer","noise","drive","cutoff","resonance","attack","release"].forEach(key => state.values[key] = .1 + Math.random()*.8);
+        state.sequence = state.sequence.map(() => [0,2,4,5,7,9,11][Math.floor(Math.random()*7)]);
+        Object.entries(state.values).forEach(([key,value]) => window.QMNative?.setParameter(key,value));
+        buildControls(); engine.update(); persist(); toast("CONTROLLED RANDOMIZATION");
+        $("#dirtyIndicator").hidden = false;
+      }
+
+      function persist() {
+        if (nativeHost) return;
+        const payload = {...state, activeCells:[...state.activeCells]};
+        localStorage.setItem("quiet-machine-vx", JSON.stringify(payload));
+      }
+
+      function restore() {
+        if (nativeHost) return;
+        try {
+          const saved = JSON.parse(localStorage.getItem("quiet-machine-vx"));
+          if (!saved) return;
+          Object.assign(state, saved);
+          state.activeCells = new Set(saved.activeCells || []);
+        } catch (_) {}
+      }
+
+      function bindUI() {
+        $$(".mode-btn").forEach(btn => btn.addEventListener("click", () => {
+          $$(".mode-btn").forEach(b => b.classList.toggle("active", b === btn));
+          $$(".view").forEach(v => v.classList.toggle("active", v.id === `view-${btn.dataset.view}`));
+        }));
+        $("#presetPrev").addEventListener("click", () => selectPreset(state.preset - 1));
+        $("#presetNext").addEventListener("click", () => selectPreset(state.preset + 1));
+        $("#savePreset").addEventListener("click", () => { persist(); $("#dirtyIndicator").hidden = true; toast("SNAPSHOT SAVED"); });
+        $("#initPreset").addEventListener("click", () => selectPreset(0));
+        $("#randomize").addEventListener("click", randomize);
+        $("#browserToggle").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
+        $("#settings").addEventListener("click", () => toast("96 kHz QUALITY / 12 VOICES / MPE READY"));
+        $("#bypass").addEventListener("click", e => { $("#app").classList.toggle("bypass"); const active=$("#app").classList.contains("bypass"); e.currentTarget.style.color = active ? "var(--red)" : ""; window.QMNative?.setParameter("bypass",active?1:0); if (engine.master) engine.master.gain.value = active ? 0 : state.values.master*.72; });
+        $$("[data-ab]").forEach(btn => btn.addEventListener("click", () => {
+          const target = btn.dataset.ab;
+          if (target === state.ab) return;
+          state.abStates[state.ab] = {...state.values};
+          if (!state.abStates[target]) state.abStates[target] = {...state.values};
+          state.ab = target;
+          Object.assign(state.values, state.abStates[target]);
+          Object.entries(state.values).forEach(([key,value]) => window.QMNative?.setParameter(key,value));
+          buildControls(); engine.update(); persist();
+          $$("[data-ab]").forEach(b=>b.classList.toggle("active",b===btn)); toast(`VARIATION ${state.ab} RECALLED`);
+        }));
+        $$("#direction button").forEach(btn => btn.addEventListener("click", () => { state.direction=btn.dataset.dir==="forward"?1:-1; $$("#direction button").forEach(b=>b.classList.toggle("active",b===btn)); }));
+        $$("#rate button").forEach(btn => btn.addEventListener("click", () => { state.rate=Number(btn.dataset.rate); $$("#rate button").forEach(b=>b.classList.toggle("active",b===btn)); if(state.playing) engine.startClock(); }));
+        $$(".sound-row").forEach(btn => btn.addEventListener("click", () => {
+          if (btn.dataset.preset !== undefined) {
+            selectPreset(Number(btn.dataset.preset));
+            $$(".sound-row[data-preset]").forEach(row => row.classList.toggle("active", row === btn));
+            $("#sidebar").classList.remove("open");
+          }
+        }));
+        $$(".browser-filters button").forEach(btn => btn.addEventListener("click", () => $$(".browser-filters button").forEach(b => b.classList.toggle("active", b === btn))));
+        $("#presetSearch").addEventListener("input", e => {
+          const query=e.target.value.trim().toLowerCase(); let count=0;
+          $$(".sound-row").forEach(row => { const show=!query||row.textContent.toLowerCase().includes(query); row.hidden=!show; if(show)count++; });
+          $("#resultCount").textContent=`${count} RESULTS`;
+        });
+        $$(".module-power").forEach(btn => btn.addEventListener("click", () => {
+          const key=btn.dataset.param;
+          if(!btn.classList.contains("off")){btn.dataset.previous=state.values[key];state.values[key]=0;btn.classList.add("off");btn.textContent="OFF";}
+          else{state.values[key]=Number(btn.dataset.previous||.5);btn.classList.remove("off");btn.textContent="ON";}
+          window.QMNative?.setParameter(key,state.values[key]);buildControls();engine.update();persist();
+        }));
+
+        const pad = $("#morphPad");
+        const moveMorph = e => {
+          const r=pad.getBoundingClientRect(); state.morphX=clamp((e.clientX-r.left)/r.width); state.morphY=clamp((e.clientY-r.top)/r.height);
+          $("#morphPuck").style.left=`${state.morphX*100}%`; $("#morphPuck").style.top=`${state.morphY*100}%`;
+          $("#morphX").textContent=Math.round(state.morphX*100); $("#morphY").textContent=Math.round(state.morphY*100);
+          state.values.space=lerp(.2,.92,state.morphY); state.values.motion=lerp(.12,.84,state.morphX); engine.update();
+          window.QMNative?.setParameter("space",state.values.space); window.QMNative?.setParameter("motion",state.values.motion);
+        };
+        pad.addEventListener("pointerdown", e => { pad.setPointerCapture(e.pointerId); moveMorph(e); });
+        pad.addEventListener("pointermove", e => { if(pad.hasPointerCapture(e.pointerId)) moveMorph(e); });
+        pad.addEventListener("pointerup", persist);
+
+        $("#playBtn").addEventListener("click", async () => {
+          if (window.QMNative) { toast("JUCE MODE: USE HOST TRANSPORT OR PLAY THE KEYBOARD"); return; }
+          state.playing=!state.playing; $("#playBtn").classList.toggle("playing",state.playing); $("#playBtn").textContent=state.playing?"PAUSE":"PLAY";
+          if(state.playing) await engine.startClock(); else { engine.stopClock(); engine.allOff(); }
+        });
+        $("#stopBtn").addEventListener("click", () => { state.playing=false; state.step=0; engine.stopClock(); engine.allOff(); $("#playBtn").classList.remove("playing"); $("#playBtn").textContent="PLAY"; updatePlayhead(); });
+        $("#recordBtn").addEventListener("click", async e => { if(window.QMNative){toast("JUCE MODE: RECORD IN THE HOST");return;} await engine.record(); e.currentTarget.style.color=state.recording?"var(--red)":""; e.currentTarget.textContent=state.recording?"STOP":"REC"; toast(state.recording?"RECORDING MASTER":"FINALIZING TAKE"); });
+        $("#keysToggle").addEventListener("click", () => $(".main").classList.toggle("keys-hidden"));
+        $("#panicBtn").addEventListener("click", () => { window.QMNative ? window.QMNative.panic() : engine.allOff(); $$(".white-key,.black-key").forEach(k=>k.classList.remove("active")); toast("ALL NOTES OFF"); });
+      }
+
+      async function syncFromNative() {
+        if (!window.QMNative) return;
+        try {
+          const nativeValues = await window.QMNative.getParameterState();
+          Object.assign(state.values, nativeValues || {});
+          buildControls();
+          $("#dirtyIndicator").hidden = true;
+          $("#audioStatus").textContent = "JUCE DSP ACTIVE";
+        } catch (_) {}
+      }
+
+      function drawScope() {
+        const canvas=$("#scopeCanvas");
+        const ctx=canvas.getContext("2d");
+        const dpr=Math.min(2,window.devicePixelRatio||1);
+        const rect=canvas.getBoundingClientRect();
+        if(canvas.width!==Math.round(rect.width*dpr)||canvas.height!==Math.round(rect.height*dpr)){canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);}
+        const w=rect.width,h=rect.height;
+        ctx.clearRect(0,0,w,h);
+        ctx.strokeStyle="#173021";ctx.lineWidth=1;
+        for(let x=0;x<w;x+=32){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+        for(let y=0;y<h;y+=24){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+        let data;
+        if(engine.analyser){data=new Uint8Array(engine.analyser.fftSize);engine.analyser.getByteTimeDomainData(data);}
+        ctx.strokeStyle="#a7d7a2";ctx.shadowColor="rgba(167,215,162,.4)";ctx.shadowBlur=5;ctx.lineWidth=1.5;ctx.beginPath();
+        for(let i=0;i<512;i++){const x=i/511*w;const sample=data?(data[i]/128-1):(Math.sin(i*.055+performance.now()*.0014)*.12+Math.sin(i*.017)*.05);const y=h/2+sample*h*.38;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();ctx.shadowBlur=0;
+        let level=0;if(data){for(const n of data){const v=n-128;level+=v*v;}level=Math.sqrt(level/data.length)/48;}else level=state.playing?.32:.04;
+        $("#meterL").style.setProperty("--meter",`${clamp(level)*100}%`);$("#meterR").style.setProperty("--meter",`${clamp(level*.92+Math.random()*.03)*100}%`);
+        const cpu=3+Math.round((state.playing?1:0)*6+engine.voices.size*.7);$("#cpuValue").textContent=String(cpu).padStart(2,"0")+"%";$("#cpuBar").style.width=`${cpu}%`;
+        requestAnimationFrame(drawScope);
+      }
+
+      restore();
+      buildControls(); buildSteps(); buildSequencer(); buildKeyboard(); bindUI();
+      window.addEventListener("qm-native-ready", syncFromNative);
+      syncFromNative();
+      $("#presetName").textContent=presets[state.preset]?.name||presets[0].name;
+      $("#morphPuck").style.left=`${state.morphX*100}%`;$("#morphPuck").style.top=`${state.morphY*100}%`;
+      $("#bpmReadout").textContent=state.bpm.toFixed(1);
+      updatePlayhead(); drawScope();
+    })();
+  </script>
+</body>
+</html>
